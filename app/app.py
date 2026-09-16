@@ -39,14 +39,14 @@ def load_vqa_model():
 st.title("💬 Medical Visual Question Answering (VQA)")
 st.markdown("""
 This application uses a **Fine-Tuned BLIP Multimodal Transformer** (Vision Encoder + Text Decoder) 
-to answer clinical and diagnostic questions about medical scans in real time.
+to perform real-time **Clinical Diagnostic Screening** on medical images.
 """)
 
 # Sidebar
 st.sidebar.header("⚙️ System Status")
 st.sidebar.info(
     f"**Model:** BLIP-VQA (Salesforce Base)\n\n"
-    f"**Fine-Tuned On:** VQA-RAD Clinical Dataset\n\n"
+    f"**Task:** Multimodal Clinical Diagnostic Screening\n\n"
     f"**Hosting:** Hugging Face Hub (`{HF_REPO_ID}`)\n\n"
     f"**Device:** `{DEVICE}`"
 )
@@ -78,45 +78,50 @@ with col2:
     st.subheader("2. Ask a Clinical Question")
     
     if uploaded_file is not None:
+        st.caption("💡 **Tip:** This model is fine-tuned for **Clinical Diagnostic Screening** (e.g. evaluating bone integrity, opacities, cardiomegaly, effusions).")
+        
         # Sample Question Preset Buttons
-        st.markdown("**Sample Questions (Click to test):**")
-        btn_col1, btn_col2 = st.columns(2)
+        st.markdown("**Click a sample question to test:**")
+        b1, b2 = st.columns(2)
+        b3, b4 = st.columns(2)
         
         sample_q = ""
-        if btn_col1.button("🫀 Cardiomegaly check"):
+        if b1.button("🦴 Are bone structures intact?"):
+            sample_q = "Are the bone structures intact?"
+        if b2.button("🫀 Cardiomegaly check"):
             sample_q = "Is there evidence of cardiomegaly?"
-        if btn_col2.button("🫁 Lung clarity check"):
-            sample_q = "Is the lung field clear?"
+        if b3.button("🫁 Pneumothorax check"):
+            sample_q = "Is pneumothorax visible?"
+        if b4.button("🩺 Pleural effusion check"):
+            sample_q = "Is pleural effusion detected?"
             
         user_question = st.text_input(
-            "Enter your clinical question about the image:",
-            value=sample_q if sample_q else "Is there any abnormality visible in this scan?",
-            placeholder="e.g., Is pneumothorax visible?"
+            "Enter your clinical screening question:",
+            value=sample_q if sample_q else "Are the bone structures intact?",
+            placeholder="e.g., Are the bone structures intact?"
         )
         
         ask_button = st.button("🚀 Analyze Scan & Answer Question", type="primary")
         
         if ask_button and user_question.strip():
             with st.spinner("🧠 Cross-attention processing (Vision + Text)..."):
-                # Prepare inputs
                 inputs = processor(images=input_image, text=user_question, return_tensors="pt").to(DEVICE)
                 
-                # Generate answer text
-                # Force BLIP to use Beam Search & Repetition Penalty for descriptive answers
                 with torch.no_grad():
                     output = model.generate(
                         **inputs,
-                        max_new_tokens=25,
-                        num_beams=5,                  # Explores 5 different response paths
-                        no_repeat_ngram_size=2,      # Prevents repeating words
-                        early_stopping=True,
-                        repetition_penalty=1.5       # Penalizes repetitive "yes/no" tokens
+                        max_new_tokens=15,
+                        num_beams=3,
+                        early_stopping=True
                     )
-                    generated_answer = processor.decode(output[0], skip_special_tokens=True).strip()
+                    generated_answer = processor.decode(output[0], skip_special_tokens=True).strip().upper()
                 
             st.markdown("---")
-            st.subheader("🤖 AI Diagnostic Answer")
-            st.success(f"**Question:** {user_question}\n\n**Answer:** **{generated_answer.upper()}**")
+            st.subheader("🤖 AI Diagnostic Screening Result")
+            if "YES" in generated_answer:
+                st.success(f"**Question:** {user_question}\n\n**Diagnostic Answer:** **{generated_answer}** ✅")
+            else:
+                st.info(f"**Question:** {user_question}\n\n**Diagnostic Answer:** **{generated_answer}** ❌")
             
             st.markdown("---")
             st.markdown("### 🧬 Multimodal Attention Breakdown")
