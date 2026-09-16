@@ -102,8 +102,16 @@ with col2:
                 inputs = processor(images=input_image, text=user_question, return_tensors="pt").to(DEVICE)
                 
                 # Generate answer text
+                # Force BLIP to use Beam Search & Repetition Penalty for descriptive answers
                 with torch.no_grad():
-                    output = model.generate(**inputs, max_new_tokens=25)
+                    output = model.generate(
+                        **inputs,
+                        max_new_tokens=25,
+                        num_beams=5,                  # Explores 5 different response paths
+                        no_repeat_ngram_size=2,      # Prevents repeating words
+                        early_stopping=True,
+                        repetition_penalty=1.5       # Penalizes repetitive "yes/no" tokens
+                    )
                     generated_answer = processor.decode(output[0], skip_special_tokens=True).strip()
                 
             st.markdown("---")
