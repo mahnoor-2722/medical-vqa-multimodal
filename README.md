@@ -10,14 +10,14 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-Live%20Demo-ff4b4b?logo=streamlit)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
----
+
 
 ## 🌐 Live Demos & Resources
 
 🔗 **[Try the Live Streamlit Multimodal Web App](https://SHARE-STREAMLIT-URL.streamlit.app)**  
 🔗 **[Fine-Tuned BLIP Model on Hugging Face Hub](https://huggingface.co/mahnoor-2722/blip-medical-vqa-rad)**
 
----
+
 
 ## 📌 Project Overview
 
@@ -25,7 +25,7 @@ This project implements an end-to-end **Medical Visual Question Answering (VQA)*
 
 Unlike standard Computer Vision models that only process static images, this system fuses **Vision Transformers (ViT)** with **Language Decoders (LLM heads)** through **Cross-Attention mechanisms** to reason across both visual and textual domains simultaneously.
 
----
+
 
 ## 🏗️ Architecture & Multimodal Pipeline
 
@@ -44,3 +44,13 @@ Unlike standard Computer Vision models that only process static images, this sys
 │                                    ▼                                        │
 │                        [🤖 Generated Clinical Answer]                        │
 └─────────────────────────────────────────────────────────────────────────────┘
+
+## Task Formulation
+This project implements **Clinical Diagnostic Screening VQA**:
+- Input: medical image + clinical question
+- Output: yes/no finding prediction
+
+The fine-tuned model specializes in closed-ended clinical queries
+(e.g., fracture/integrity/effusion/cardiomegaly style screening).
+
+For open-ended descriptive questions, the app can fall back to base BLIP.

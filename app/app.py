@@ -1,152 +1,97 @@
 # ============================================================
-# Streamlit Web Application: Medical Visual Question Answering (VQA)
-# Model: Fine-Tuned BLIP Multimodal Transformer | PyTorch
-# Author: Mahnoor (github.com/mahnoor-2722)
+# Medical VQA App (Hybrid)
+# Fine-tuned BLIP = clinical yes/no screening
+# Base BLIP = open-ended fallback
 # ============================================================
 
-import os
 import torch
 import streamlit as st
 from PIL import Image
 from transformers import BlipProcessor, BlipForQuestionAnswering
 
-# Page Configuration
-st.set_page_config(
-    page_title="Medical VQA — Multimodal AI",
-    page_icon="💬",
-    layout="wide"
-)
+st.set_page_config(page_title="Medical VQA", page_icon="💬", layout="wide")
 
-# Constants
-HF_REPO_ID = "mahnoor-2722/blip-medical-vqa-rad"
+FT_REPO = "mahnoor-2722/blip-medical-vqa-rad"
+BASE_REPO = "Salesforce/blip-vqa-base"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 @st.cache_resource
-def load_vqa_model():
-    """Load Fine-Tuned BLIP Model and Processor from Hugging Face Hub"""
-    try:
-        processor = BlipProcessor.from_pretrained(HF_REPO_ID)
-        model = BlipForQuestionAnswering.from_pretrained(HF_REPO_ID)
-        model.to(DEVICE)
-        model.eval()
-        return processor, model
-    except Exception as e:
-        st.error(f"❌ Error loading model from Hugging Face Hub: {e}")
-        return None, None
+def load_models():
+    ft_processor = BlipProcessor.from_pretrained(FT_REPO)
+    ft_model = BlipForQuestionAnswering.from_pretrained(FT_REPO).to(DEVICE).eval()
 
-# ==================== STREAMLIT UI ==================== #
+    base_processor = BlipProcessor.from_pretrained(BASE_REPO)
+    base_model = BlipForQuestionAnswering.from_pretrained(BASE_REPO).to(DEVICE).eval()
+    return ft_processor, ft_model, base_processor, base_model
+
+def is_closed_ended(q: str) -> bool:
+    q = q.lower().strip()
+    starters = ("is ", "are ", "was ", "were ", "do ", "does ", "can ", "could ")
+    return q.startswith(starters) or q.startswith("is there") or q.startswith("are there")
 
 st.title("💬 Medical Visual Question Answering (VQA)")
-st.markdown("""
-This application uses a **Fine-Tuned BLIP Multimodal Transformer** (Vision Encoder + Text Decoder) 
-to perform real-time **Clinical Diagnostic Screening** on medical images.
-""")
+st.caption("Hybrid system: clinical yes/no screening (fine-tuned) + open-ended fallback (base BLIP)")
 
-# Sidebar
-st.sidebar.header("⚙️ System Status")
-st.sidebar.info(
-    f"**Model:** BLIP-VQA (Salesforce Base)\n\n"
-    f"**Task:** Multimodal Clinical Diagnostic Screening\n\n"
-    f"**Hosting:** Hugging Face Hub (`{HF_REPO_ID}`)\n\n"
-    f"**Device:** `{DEVICE}`"
-)
+ft_processor, ft_model, base_processor, base_model = load_models()
+st.sidebar.success("✅ Models loaded")
+st.sidebar.info(f"Device: {DEVICE}")
 
-# Load Model
-with st.spinner("⏳ Loading Fine-Tuned BLIP Multimodal Model from Hugging Face..."):
-    processor, model = load_vqa_model()
+c1, c2 = st.columns(2)
 
-if model is None or processor is None:
-    st.stop()
+with c1:
+    st.subheader("1) Upload scan")
+    f = st.file_uploader("X-ray / MRI / CT / clinical image", type=["jpg", "jpeg", "png"])
+    image = None
+    if f is not None:
+        image = Image.open(f).convert("RGB")
+        st.image(image, use_container_width=True)
 
-st.sidebar.success("✅ Multimodal Model Ready!")
-
-# Main Upload & Question Interface
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    st.subheader("1. Upload Clinical Scan")
-    uploaded_file = st.file_uploader(
-        "Choose a Radiology Scan (X-Ray, MRI, CT, or Clinical Photo)",
-        type=["jpg", "jpeg", "png"]
-    )
-    
-    if uploaded_file is not None:
-        input_image = Image.open(uploaded_file).convert("RGB")
-        st.image(input_image, caption="Uploaded Medical Scan", use_container_width=True)
-
-with col2:
-    st.subheader("2. Ask a Clinical Question")
-    
-    if uploaded_file is not None:
-        st.caption("💡 **Tip:** This model is fine-tuned for **Clinical Diagnostic Screening** (e.g. evaluating bone integrity, opacities, cardiomegaly, effusions).")
-        
-        # Sample Question Preset Buttons
-        st.markdown("**Click a sample question to test:**")
+with c2:
+    st.subheader("2) Ask a question")
+    if image is None:
+        st.info("Upload an image first")
+    else:
+        st.markdown("**Try these (best for fine-tuned model):**")
         b1, b2 = st.columns(2)
         b3, b4 = st.columns(2)
-        
-        sample_q = ""
-        if b1.button("🦴 Are bone structures intact?"):
-            sample_q = "Are the bone structures intact?"
-        if b2.button("🫀 Cardiomegaly check"):
-            sample_q = "Is there evidence of cardiomegaly?"
-        if b3.button("🫁 Pneumothorax check"):
-            sample_q = "Is pneumothorax visible?"
-        if b4.button("🩺 Pleural effusion check"):
-            sample_q = "Is pleural effusion detected?"
-            
-        user_question = st.text_input(
-            "Enter your clinical screening question:",
-            value=sample_q if sample_q else "Are the bone structures intact?",
-            placeholder="e.g., Are the bone structures intact?"
-        )
-        
-        ask_button = st.button("🚀 Analyze Scan & Answer Question", type="primary")
-        
-        if ask_button and user_question.strip():
-            with st.spinner("🧠 Cross-attention processing (Vision + Text)..."):
-                inputs = processor(images=input_image, text=user_question, return_tensors="pt").to(DEVICE)
-                
+        preset = ""
+        if b1.button("Are the bone structures intact?"):
+            preset = "Are the bone structures intact?"
+        if b2.button("Is there evidence of cardiomegaly?"):
+            preset = "Is there evidence of cardiomegaly?"
+        if b3.button("Is pneumothorax visible?"):
+            preset = "Is pneumothorax visible?"
+        if b4.button("Is pleural effusion detected?"):
+            preset = "Is pleural effusion detected?"
+
+        q = st.text_input("Clinical question", value=preset or "Are the bone structures intact?")
+
+        if st.button("Analyze", type="primary"):
+            closed = is_closed_ended(q)
+
+            with st.spinner("Running multimodal inference..."):
+                if closed:
+                    processor, model, mode = ft_processor, ft_model, "Fine-tuned clinical screener"
+                else:
+                    processor, model, mode = base_processor, base_model, "Base BLIP open-ended fallback"
+
+                inputs = processor(images=image, text=q, return_tensors="pt").to(DEVICE)
                 with torch.no_grad():
-                    output = model.generate(
+                    out = model.generate(
                         **inputs,
-                        max_new_tokens=15,
-                        num_beams=3,
+                        max_new_tokens=20,
+                        num_beams=4,
                         early_stopping=True
                     )
-                    generated_answer = processor.decode(output[0], skip_special_tokens=True).strip().upper()
-                
+                ans = processor.decode(out[0], skip_special_tokens=True).strip()
+
             st.markdown("---")
-            st.subheader("🤖 AI Diagnostic Screening Result")
-            if "YES" in generated_answer:
-                st.success(f"**Question:** {user_question}\n\n**Diagnostic Answer:** **{generated_answer}** ✅")
+            st.subheader("AI Answer")
+            st.success(f"**Mode:** {mode}\n\n**Q:** {q}\n\n**A:** **{ans}**")
+
+            if closed:
+                st.info("This question looks closed-ended, so the fine-tuned clinical model was used.")
             else:
-                st.info(f"**Question:** {user_question}\n\n**Diagnostic Answer:** **{generated_answer}** ❌")
-            
-            st.markdown("---")
-            st.markdown("### 🧬 Multimodal Attention Breakdown")
-            st.info(
-                f"• **Vision Encoder:** Extracted 256 spatial patch embeddings\n\n"
-                f"• **Text Encoder:** Tokenized clinical query '{user_question}'\n\n"
-                f"• **Cross-Attention:** Aligned visual regions with textual query tokens\n\n"
-                f"• **Decoder Output:** `{generated_answer}`"
-            )
-    else:
-        st.info("👆 Please upload a medical scan on the left to activate the Q&A interface.")
+                st.warning("Open-ended question detected. Used base BLIP fallback because fine-tuned model is specialized for yes/no clinical screening.")
 
-st.markdown("---")
-st.warning(
-    "📌 **Medical Disclaimer:** This is an open-source research demonstration fine-tuned on clinical VQA datasets. "
-    "It is **not** a certified medical diagnostic device and must not be used for primary healthcare decisions."
-)
-
-# Footer
-st.markdown("---")
-st.markdown(
-    "<div style='text-align:center; color:gray; font-size:0.85em;'>"
-    "Built by <b>Mahnoor</b> · Multimodal Vision-Language AI (BLIP) · "
-    "<a href='https://github.com/mahnoor-2722/medical-vqa-multimodal' target='_blank'>GitHub</a> · "
-    "<a href='https://huggingface.co/mahnoor-2722/blip-medical-vqa-rad' target='_blank'>Hugging Face Model</a>"
-    "</div>",
-    unsafe_allow_html=True
-)
+st.warning("Research demo only — not for clinical diagnosis.")
